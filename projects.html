@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lingzhi Chen — Projects</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav-inner">
+      <a href="index.html" class="brand">Lingzhi Chen</a>
+      <button class="nav-toggle" aria-label="Toggle menu" onclick="document.getElementById('navlinks').classList.toggle('open')">&#9776;</button>
+      <ul class="nav-links" id="navlinks">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="resume.html">Resume</a></li>
+        <li><a href="projects.html" class="active">Projects</a></li>
+        <li><a href="contact.html">Contact Me</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="container">
+      <section class="todo-section">
+        <div class="card todo-card">
+          <div class="todo-head">
+            <h2>Task Planner</h2>
+            <p>Pick a date on the calendar, write your task, and press Add. Check the box when it's done, or tap the × to remove it.</p>
+            <div class="todo-counter" id="todo-counter" aria-live="polite">0 of 0 tasks completed</div>
+          </div>
+
+          <div class="todo-notice" id="todo-notice" hidden></div>
+
+          <form class="todo-form" id="todo-form">
+            <div class="todo-field todo-field-date">
+              <label for="todo-date">Date</label>
+              <input type="date" id="todo-date" required />
+            </div>
+            <div class="todo-field todo-field-task">
+              <label for="todo-task">Task</label>
+              <input type="text" id="todo-task" placeholder="e.g. Finish portfolio draft" required maxlength="120" />
+            </div>
+            <button type="submit" class="btn todo-add">Add</button>
+
+            <div class="todo-field todo-field-priority">
+              <div class="priority-emoji-display" id="priority-emoji-display" aria-hidden="true">🟡</div>
+              <label>Priority</label>
+              <div class="priority-picker" id="priority-picker" role="group" aria-label="Task priority">
+                <button type="button" class="priority-btn prio-low" data-priority="low" data-emoji="🟢">🟢 Low</button>
+                <button type="button" class="priority-btn prio-medium active" data-priority="medium" data-emoji="🟡">🟡 Medium</button>
+                <button type="button" class="priority-btn prio-high" data-priority="high" data-emoji="🔴">🔴 High</button>
+              </div>
+            </div>
+
+            <div class="todo-field todo-field-emoji">
+              <label>Emoji — pick a fun one</label>
+              <div class="emoji-picker" id="emoji-picker" role="group" aria-label="Task emoji">
+                <button type="button" class="emoji-btn" data-emoji="🟢" aria-label="Green circle">🟢</button>
+                <button type="button" class="emoji-btn active" data-emoji="🟡" aria-label="Yellow circle">🟡</button>
+                <button type="button" class="emoji-btn" data-emoji="🔴" aria-label="Red circle">🔴</button>
+                <button type="button" class="emoji-btn" data-emoji="🎯" aria-label="Target">🎯</button>
+                <button type="button" class="emoji-btn" data-emoji="⭐" aria-label="Star">⭐</button>
+                <button type="button" class="emoji-btn" data-emoji="🌸" aria-label="Flower">🌸</button>
+              </div>
+            </div>
+          </form>
+
+          <ul class="todo-list" id="todo-list"></ul>
+          <p class="todo-empty" id="todo-empty">No tasks yet — add your first one above.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+  (function () {
+    var SUPABASE_URL = 'https://zyuocpghopbqwrxnrylw.supabase.co';
+    var SUPABASE_KEY = 'sb_publishable_vzM7T8N7IhAclhBeXhsKog_Sc7DUisu';
+    var db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    var form = document.getElementById('todo-form');
+    var dateInput = document.getElementById('todo-date');
+    var taskInput = document.getElementById('todo-task');
+    var list = document.getElementById('todo-list');
+    var emptyNote = document.getElementById('todo-empty');
+    var counterEl = document.getElementById('todo-counter');
+    var noticeEl = document.getElementById('todo-notice');
+    var priorityPicker = document.getElementById('priority-picker');
+    var emojiPicker = document.getElementById('emoji-picker');
+    var emojiDisplay = document.getElementById('priority-emoji-display');
+    var currentPriority = 'medium';
+    var currentEmoji = '🟡';
+    var items = [];
+
+    // The todos table is expected to have core columns: id, task, date, created_at.
+    // priority / emoji / done are optional and detected at startup so the app
+    // keeps working (tasks, dates, ordering, delete) even before they are added.
+    var caps = { priority: false, emoji: false, done: false };
+    var DONE_KEY = 'lc_todo_local_done';
+    function loadLocalDone() {
+      try { return JSON.parse(localStorage.getItem(DONE_KEY)) || {}; }
+      catch (e) { return {}; }
+    }
+    function saveLocalDone(map) {
+      try { localStorage.setItem(DONE_KEY, JSON.stringify(map)); } catch (e) {}
+    }
+    var localDone = loadLocalDone();
+
+    // default date = today
+    dateInput.value = new Date().toISOString().slice(0, 10);
+
+    function fmtDate(iso) {
+      if (!iso) return '';
+      var d = new Date(iso + 'T00:00:00');
+      if (isNaN(d)) return iso;
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+      });
+    }
+
+    function priorityLabel(p) {
+      return p === 'low' ? 'Low' : p === 'high' ? 'High' : 'Medium';
+    }
+
+    function updateCounter(items) {
+      var total = items.length;
+      var done = 0;
+      items.forEach(function (it) { if (it.done) done++; });
+      counterEl.textContent = done + ' of ' + total + ' tasks completed';
+      counterEl.style.display = total ? '' : 'none';
+    }
+
+    function render() {
+      list.innerHTML = '';
+      if (items.length === 0) {
+        emptyNote.textContent = 'No tasks yet — add your first one above.';
+        emptyNote.style.display = 'block';
+      } else {
+        emptyNote.style.display = 'none';
+      }
+      updateCounter(items);
+      items.forEach(function (item) {
+        var li = document.createElement('li');
+        li.className = 'todo-item' + (item.done ? ' done' : '');
+        li.dataset.id = item.id;
+        li.innerHTML =
+          '<label class="todo-check">' +
+            '<input type="checkbox" ' + (item.done ? 'checked' : '') + ' />' +
+            '<span class="todo-checkmark"></span>' +
+          '</label>' +
+          '<div class="todo-content">' +
+            '<span class="todo-text" title="Click to edit"><span class="todo-emoji">' + (item.emoji || '🟡') + '</span> ' + escapeHtml(item.text) + '</span>' +
+            '<span class="todo-date">' + fmtDate(item.date) + ' · <span class="todo-priority prio-' + (item.priority || 'medium') + '">' + priorityLabel(item.priority) + '</span></span>' +
+          '</div>' +
+          '<button class="todo-delete" aria-label="Delete task">&times;</button>';
+        list.appendChild(li);
+      });
+    }
+
+    async function detectCaps() {
+      var cols = ['priority', 'emoji', 'done'];
+      for (var i = 0; i < cols.length; i++) {
+        try {
+          var r = await db.from('todos').select(cols[i]).limit(0);
+          caps[cols[i]] = !r.error;
+        } catch (e) { caps[cols[i]] = false; }
+      }
+    }
+
+    function showNotice(kind, html) {
+      noticeEl.hidden = false;
+      noticeEl.className = 'todo-notice todo-notice-' + kind;
+      noticeEl.innerHTML = html + ' <button type="button" class="todo-notice-close" aria-label="Dismiss">&times;</button>';
+      var btn = noticeEl.querySelector('.todo-notice-close');
+      if (btn) btn.addEventListener('click', function () { noticeEl.hidden = true; });
+    }
+    function hideNotice() { noticeEl.hidden = true; }
+
+    var UPGRADE_SQL =
+      'alter table public.todos\n' +
+      "  add column if not exists priority text    not null default 'medium',\n" +
+      "  add column if not exists emoji    text    not null default '🟡',\n" +
+      '  add column if not exists done     boolean not null default false;';
+
+    function errMsg(e) { return escapeHtml((e && e.message) ? e.message : 'unknown error'); }
+
+    function renderSchemaNotice() {
+      var missing = ['priority', 'emoji', 'done'].filter(function (c) { return !caps[c]; });
+      if (!missing.length) { hideNotice(); return; }
+      var what = [];
+      if (!caps.done) what.push('checkbox completion');
+      if (!caps.priority || !caps.emoji) what.push('priority');
+      showNotice('warn',
+        '<strong>Almost there.</strong> Your <code>todos</code> table is missing the <code>' +
+        missing.join('</code>, <code>') + '</code> column' + (missing.length > 1 ? 's' : '') +
+        '. Tasks, dates and delete already sync to the cloud; ' + what.join(' and ') +
+        ' won’t until you run this once in <strong>Supabase Dashboard → SQL Editor</strong> and reload:' +
+        '<details><summary>Show SQL</summary><pre>' + escapeHtml(UPGRADE_SQL) + '</pre></details>'
+      );
+    }
+
+    async function refresh() {
+      emptyNote.textContent = 'Loading tasks…';
+      emptyNote.style.display = 'block';
+      list.innerHTML = '';
+      updateCounter([]);
+      try {
+        var res = await db.from('todos').select('*').order('created_at', { ascending: true });
+        if (res.error) throw res.error;
+        var ids = {};
+        items = (res.data || []).map(function (r) {
+          var rid = String(r.id);
+          ids[rid] = true;
+          return {
+            id: rid,
+            text: r.task,
+            date: r.date,
+            priority: r.priority || 'medium',
+            emoji: r.emoji || '🟡',
+            done: r.done === true || localDone[rid] === true,
+            created_at: r.created_at
+          };
+        });
+        // drop local completion overrides for rows that no longer exist
+        var changed = false;
+        Object.keys(localDone).forEach(function (id) {
+          if (!ids[id]) { delete localDone[id]; changed = true; }
+        });
+        if (changed) saveLocalDone(localDone);
+      } catch (e) {
+        console.error('Failed to load tasks', e);
+        items = [];
+        emptyNote.textContent = 'Could not load tasks — see notice above.';
+        showNotice('error', '<strong>Could not load tasks.</strong> ' + errMsg(e));
+        updateCounter(items);
+        return;
+      }
+      render();
+      renderSchemaNotice();
+    }
+
+    async function add(text, date) {
+      var payload = { task: text, date: date };
+      if (caps.priority) payload.priority = currentPriority;
+      if (caps.emoji) payload.emoji = currentEmoji;
+      if (caps.done) payload.done = false;
+      try {
+        var res = await db.from('todos').insert([payload]);
+        if (res.error) throw res.error;
+      } catch (e) {
+        console.error('Failed to add task', e);
+        showNotice('error', '<strong>Task not saved.</strong> ' + errMsg(e));
+      }
+      await refresh();
+    }
+
+    async function toggle(id) {
+      var item = items.filter(function (it) { return it.id === id; })[0];
+      if (!item) return;
+      if (caps.done) {
+        try {
+          var res = await db.from('todos').update({ done: !item.done }).eq('id', id);
+          if (res.error) throw res.error;
+        } catch (e) {
+          console.error('Failed to update task', e);
+          showNotice('error', '<strong>Could not update task.</strong> ' + errMsg(e));
+        }
+        await refresh();
+      } else {
+        // No done column yet: keep completion state on this device only.
+        item.done = !item.done;
+        if (item.done) localDone[id] = true; else delete localDone[id];
+        saveLocalDone(localDone);
+        render();
+      }
+    }
+
+    async function remove(id) {
+      delete localDone[id];
+      saveLocalDone(localDone);
+      try {
+        var res = await db.from('todos').delete().eq('id', id);
+        if (res.error) throw res.error;
+      } catch (e) {
+        console.error('Failed to delete task', e);
+        showNotice('error', '<strong>Could not delete task.</strong> ' + errMsg(e));
+      }
+      await refresh();
+    }
+
+    async function updateText(id, text) {
+      try {
+        var res = await db.from('todos').update({ task: text }).eq('id', id);
+        if (res.error) throw res.error;
+      } catch (e) {
+        console.error('Failed to update task', e);
+        showNotice('error', '<strong>Could not save edit.</strong> ' + errMsg(e));
+      }
+      await refresh();
+    }
+
+    function startEdit(id) {
+      var li = list.querySelector('.todo-item[data-id="' + id + '"]');
+      if (!li) return;
+      var span = li.querySelector('.todo-text');
+      if (!span || span.querySelector('input')) return;
+      var item = items.filter(function (it) { return it.id === id; })[0];
+      if (!item) return;
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'todo-edit-input';
+      input.value = item.text;
+      input.maxLength = 120;
+      span.textContent = '';
+      span.appendChild(input);
+      input.focus();
+      input.select();
+      var done = false;
+      function commit() {
+        if (done) return;
+        done = true;
+        var val = input.value.trim();
+        if (val && val !== item.text) {
+          updateText(id, val);
+        } else {
+          render();
+        }
+      }
+      function cancel() {
+        if (done) return;
+        done = true;
+        render();
+      }
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      });
+      input.addEventListener('blur', commit);
+    }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var text = taskInput.value.trim();
+      var date = dateInput.value;
+      if (!text || !date) return;
+      add(text, date);
+      taskInput.value = '';
+      taskInput.focus();
+    });
+
+    list.addEventListener('click', function (e) {
+      var li = e.target.closest('.todo-item');
+      if (!li) return;
+      var id = li.dataset.id;
+      if (e.target.matches('input[type="checkbox"]')) {
+        toggle(id);
+      } else if (e.target.closest('.todo-delete')) {
+        remove(id);
+      } else if (e.target.closest('.todo-text')) {
+        startEdit(id);
+      }
+    });
+
+    function setEmoji(emoji) {
+      currentEmoji = emoji;
+      emojiDisplay.textContent = emoji;
+      var ebs = emojiPicker.querySelectorAll('.emoji-btn');
+      ebs.forEach(function (b) { b.classList.toggle('active', b.dataset.emoji === emoji); });
+    }
+
+    priorityPicker.addEventListener('click', function (e) {
+      var btn = e.target.closest('.priority-btn');
+      if (!btn) return;
+      var btns = priorityPicker.querySelectorAll('.priority-btn');
+      btns.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      currentPriority = btn.dataset.priority;
+      setEmoji(btn.dataset.emoji);
+    });
+
+    emojiPicker.addEventListener('click', function (e) {
+      var btn = e.target.closest('.emoji-btn');
+      if (!btn) return;
+      setEmoji(btn.dataset.emoji);
+    });
+
+    detectCaps().then(refresh);
+  })();
+  </script>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="fun-fact">Fun fact: I enjoy testing new digital tools — I am always curious about innovative learning ideas. <span>True story.</span></div>
+      <div>&copy; 2026 Lingzhi Chen · Built with care and a lot of coffee.</div>
+    </div>
+  </footer>
+
+</body>
+</html>

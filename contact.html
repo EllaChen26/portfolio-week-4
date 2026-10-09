@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lingzhi Chen — Contact Me</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="container nav-inner">
+      <a href="index.html" class="brand">Lingzhi Chen</a>
+      <button class="nav-toggle" aria-label="Toggle menu" onclick="document.getElementById('navlinks').classList.toggle('open')">&#9776;</button>
+      <ul class="nav-links" id="navlinks">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="resume.html">Resume</a></li>
+        <li><a href="projects.html">Projects</a></li>
+        <li><a href="contact.html" class="active">Contact Me</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="container">
+      <div class="page-head">
+        <h1>Contact Me</h1>
+        <p>I'd love to hear from you — whether it's a project, a question, or just to say hi. I'll write back.</p>
+      </div>
+
+      <div class="contact-wrap">
+
+        <!-- Contact info -->
+        <section class="card contact-info">
+          <h2>Reach me here</h2>
+          <ul>
+            <li>
+              <span class="ic">&#9993;</span>
+              <div><strong>Email</strong><br /><a href="mailto:lingzhi.chen@example.com">lingzhi.chen@example.com</a></div>
+            </li>
+            <li>
+              <span class="ic">&#128241;</span>
+              <div><strong>Phone</strong><br />+1 (555) 123-4567</div>
+            </li>
+            <li>
+              <span class="ic">&#127968;</span>
+              <div><strong>Location</strong><br />Portland, Oregon</div>
+            </li>
+            <li>
+              <span class="ic">&#127757;</span>
+              <div><strong>Elsewhere</strong><br />
+                <a href="#">GitHub</a> · <a href="#">LinkedIn</a> · <a href="#">Instagram</a>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <!-- Contact form -->
+        <section class="card contact-form">
+          <h2>Send a message</h2>
+          <form onsubmit="event.preventDefault(); document.getElementById('form-note').hidden = false; this.reset();">
+            <label for="name">Name</label>
+            <input id="name" name="name" type="text" placeholder="Your name" required />
+
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" placeholder="you@example.com" required />
+
+            <label for="message">Message</label>
+            <textarea id="message" name="message" placeholder="Tell me what's on your mind..." required></textarea>
+
+            <button type="submit" class="btn" style="margin-top: 18px;">Send message</button>
+            <p id="form-note" hidden style="color: var(--accent-deep); margin-top: 14px; font-weight: 600;">
+              Thanks! Your message is on its way. I'll get back to you soon.
+            </p>
+          </form>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="fun-fact">Fun fact: I enjoy testing new digital tools — I am always curious about innovative learning ideas. <span>True story.</span></div>
+      <div>&copy; 2026 Lingzhi Chen · Built with care and a lot of coffee.</div>
+    </div>
+  </footer>
+
+</body>
+</html>
